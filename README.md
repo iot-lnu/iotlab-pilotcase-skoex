@@ -1,4 +1,4 @@
-## Skoex 
+## Skoex
 
 Skoex is developing an innovative solution for schools to enhance student safety during emergencies. The system provides a connected door-stop mechanism that can be utilized in scenarios where students need to secure themselves quickly. The solution involves a pole that students place under the door handle to physically restrict entry. When the pole is removed from its designated wall mount, a signal is automatically transmitted to notify authorities or responders, ensuring a swift reaction to potential threats.
 

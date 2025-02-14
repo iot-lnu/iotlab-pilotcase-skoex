@@ -1,0 +1,38 @@
+# ESP-IDF specific
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+managed_components/
+
+# Binary files
+*.bin
+*.elf
+*.map
+
+# Object files
+*.o
+
+# Debug files
+*.debug
+
+# Log files
+*.log
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Temporary files
+*.tmp
+
+# System Files
+.DS_Store
+Thumbs.db
