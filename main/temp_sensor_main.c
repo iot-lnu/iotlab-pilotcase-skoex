@@ -1,37 +1,48 @@
 #include <stdio.h>
+#include "driver/gpio.h"
+#include "esp_sleep.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/adc.h"
-#include "driver/gpio.h"
-#include "esp_log.h"
 
-// Define sensor pins
-#define DIGITAL_PIN GPIO_NUM_26   // Digital output (DO)
-#define ANALOG_PIN ADC1_CHANNEL_6 // Analog output (AO) on GPIO34
+#define DIGITAL_PIN 25 // KY-025 D0 connected here
 
-void app_main(void)
+void app_main()
 {
-    ESP_LOGI("HALL SENSOR", "Starting Sensor Readout...");
+    // Configure digital pin
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << DIGITAL_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE};
+    gpio_config(&io_conf);
 
-    // Configure Digital Input
-    gpio_reset_pin(DIGITAL_PIN);
-    gpio_set_direction(DIGITAL_PIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(DIGITAL_PIN, GPIO_PULLUP_ONLY); // Enable pull-up resistor
+    int digital_value = gpio_get_level(DIGITAL_PIN);
 
-    // Configure Analog Input
-    adc1_config_width(ADC_WIDTH_BIT_12);                    // 12-bit ADC resolution (0-4095)
-    adc1_config_channel_atten(ANALOG_PIN, ADC_ATTEN_DB_11); // Full-range voltage
-
-    while (1)
+    if (digital_value == 1)
     {
-        // Read values
-        int digitalVal = gpio_get_level(DIGITAL_PIN);
-        int analogVal = adc1_get_raw(ANALOG_PIN);
-
-        // Print results
-        ESP_LOGI("HALL SENSOR", "Digital: %d | Analog: %d", digitalVal, analogVal);
-
-        // Small delay before next reading
-        vTaskDelay(pdMS_TO_TICKS(500));
+        ESP_LOGI("KY-025", "D0 = 1, entering deep sleep...");
+        esp_sleep_enable_ext0_wakeup(DIGITAL_PIN, 0); // Wake up when D0 goes LOW (magnet detected)
+        esp_deep_sleep_start();                       // Enter deep sleep
     }
+
+    // If woken up, wait 5 seconds before printing the message
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    // Check if the signal is STILL low after the delay
+    digital_value = gpio_get_level(DIGITAL_PIN);
+    if (digital_value == 0)
+    {
+        ESP_LOGI("KY-025", "Magnet detected! Sending message...");
+    }
+    else
+    {
+        ESP_LOGI("KY-025", "D0 changed to 1 before delay, skipping message.");
+    }
+
+    // Go back to deep sleep
+    ESP_LOGI("KY-025", "Going back to deep sleep...");
+    esp_sleep_enable_ext0_wakeup(DIGITAL_PIN, 0);
+    esp_deep_sleep_start();
 }
