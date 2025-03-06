@@ -1,57 +1,61 @@
 #include <stdio.h>
 #include "driver/gpio.h"
 #include "esp_sleep.h"
-#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define DIGITAL_PIN 25             // KY-025 D0 connected here
-static const char *TAG = "KY-025"; // ESP_LOG tag for better debugging
+#define REED_SWITCH_PIN 7     // GPIO pin for reed switch
+#define DEBOUNCE_TIME_MS 50   // Debounce time
+#define MESSAGE_DELAY_MS 5000 // Delay before sending message
+
+void enter_deep_sleep()
+{
+    fflush(stdout);
+    esp_sleep_enable_ext0_wakeup(REED_SWITCH_PIN, 1); // Wake up when magnet is removed (HIGH)
+    esp_deep_sleep_start();
+}
 
 void app_main()
 {
-    // Configure digital pin
+    // Configure reed switch pin
     gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << DIGITAL_PIN),
+        .pin_bit_mask = (1ULL << REED_SWITCH_PIN),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE};
     gpio_config(&io_conf);
 
-    int digital_value = gpio_get_level(DIGITAL_PIN);
+    printf("Starting reed switch monitoring...\n");
 
-    ESP_LOGI(TAG, "Actual digit: %d", digital_value); // Log the initial value
-
-    // Go to deep sleep if NO magnet is detected (D0 = 0)
-    if (digital_value == 0)
+    while (1)
     {
-        ESP_LOGI(TAG, "No magnet detected (D0 = 0), entering deep sleep...");
-        esp_sleep_enable_ext0_wakeup(DIGITAL_PIN, 1); // Wake up when D0 goes HIGH (magnet appears)
-        esp_deep_sleep_start();                       // Enter deep sleep
-    }
+        int sensor_state = gpio_get_level(REED_SWITCH_PIN);
 
-    // If woken up, wait 5 seconds before checking again
-    vTaskDelay(pdMS_TO_TICKS(5000));
+        if (sensor_state == 0)
+        {
+            printf("Magnet detected! Going to sleep\n");
+            enter_deep_sleep();
+        }
+        else if (sensor_state == 1)
+        {
+            printf("5 second delay before sending message\n");
 
-    // Re-check the sensor value
-    digital_value = gpio_get_level(DIGITAL_PIN);
-    ESP_LOGI(TAG, "Actual digit after delay: %d", digital_value); // Log updated value
+            // Check the signal during the waiting period, whilst allowing for any interrupts from the sensor
+            for (int i = 0; i < (MESSAGE_DELAY_MS / 500); i++)
+            {
+                vTaskDelay(pdMS_TO_TICKS(500)); // Check every 500ms
+                if (gpio_get_level(REED_SWITCH_PIN) == 0)
+                {
+                    printf("Signal changed back to 0, aborting message and going to sleep\n");
+                    enter_deep_sleep();
+                }
+            }
 
-    if (digital_value == 1)
-    {
-        ESP_LOGI(TAG, "Magnet detected! Sending message...");
-    }
-    else
-    {
-        ESP_LOGI(TAG, "D0 changed to 0 before delay, skipping message.");
-    }
+            // If the signal stayed 1 throughout the delay, send the message
+            printf("Sending message!\n");
+        }
 
-    // Go back to deep sleep if magnet is gone
-    ESP_LOGI(TAG, "Rechecking... Going back to deep sleep if no magnet...");
-    if (digital_value == 0)
-    {
-        esp_sleep_enable_ext0_wakeup(DIGITAL_PIN, 1);
-        esp_deep_sleep_start();
+        vTaskDelay(pdMS_TO_TICKS(500)); // Check every 500ms
     }
 }
